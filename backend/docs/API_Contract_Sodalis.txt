@@ -1,0 +1,821 @@
+================================================================================
+SODALIS MICRO-FINANCE — ADMIN UNDERWRITING TERMINAL
+REST API CONTRACT & FRONTEND INTEGRATION SPECIFICATION
+Version: 1.0.0 (Production-Ready)
+Base URL: http://localhost:8000/api/v1
+Static Uploads Base: http://localhost:8000/uploads/kyc/
+Allowed Frontend Origin: http://localhost:5173
+Date Generated: 2026-11-16
+================================================================================
+
+--------------------------------------------------------------------------------
+TABLE OF CONTENTS
+--------------------------------------------------------------------------------
+1. GENERAL ARCHITECTURE & PROTOCOLS
+2. STANDARD HTTP RESPONSE ENVELOPES
+3. AUTHENTICATION & AUTHORIZATION HEADERS
+4. ENDPOINT SPECIFICATIONS
+   4.1 SYSTEM HEALTH
+   4.2 AUTHENTICATION & TOTP 2FA
+   4.3 OPERATIONS & UNDERWRITING DASHBOARD
+   4.4 USER REGISTRATIONS & KYC INSPECTOR
+   4.5 LOAN APPLICATIONS & MIDTRANS DISBURSEMENT
+   4.6 COMPLIANCE AUDIT LOGS
+   4.7 STREAMING REPORT EXPORTS (EXCEL & PDF)
+   4.8 PAYMENT WEBHOOKS (MIDTRANS SNAP)
+5. DATABASE SCHEMA FIELD MAPPING (EXISTING SUPABASE POSTGRESQL)
+6. FRONTEND (REACT VITE + AXIOS) INTEGRATION SNIPPET
+
+================================================================================
+1. GENERAL ARCHITECTURE & PROTOCOLS
+================================================================================
+- Protocol: HTTP / JSON RESTful API
+- Port: 8000 (Local Windows & Production Standard)
+- Default Character Set: UTF-8
+- Authentication: JSON Web Token (JWT) Bearer Token in Request Header
+- Row-Level Security: Managed securely via backend Supabase Service Role Key
+- Document Uploads: Multipart Form-Data (Max File Size: 15MB, PDF/JPEG/PNG/WebP)
+- Audit Trail: Immutable SHA-256 integrity hash on all compliance events
+
+================================================================================
+2. STANDARD HTTP RESPONSE ENVELOPES
+================================================================================
+
+--- SUCCESS ENVELOPE ---
+HTTP Status: 200 OK / 201 Created
+{
+  "success": true,
+  "message": "Human-readable operation status description (optional)",
+  "data": { ... } // JSON Object or Array
+}
+
+--- PAGINATED SUCCESS ENVELOPE ---
+HTTP Status: 200 OK
+{
+  "success": true,
+  "data": {
+    "items": [ ... ],
+    "pagination": {
+      "page": 1,
+      "limit": 10,
+      "total": 45,
+      "totalPages": 5
+    }
+  }
+}
+
+--- ERROR ENVELOPE ---
+HTTP Status: 400 Bad Request / 401 Unauthorized / 403 Forbidden / 404 Not Found / 500 Internal Error
+{
+  "success": false,
+  "message": "Clear description of what went wrong",
+  "error": "Underlying error message (only in development)"
+}
+
+================================================================================
+3. AUTHENTICATION & AUTHORIZATION HEADERS
+================================================================================
+Protected endpoints require the standard Authorization HTTP Header:
+Authorization: Bearer <YOUR_SIGNED_JWT_TOKEN>
+
+Public Endpoints (No Bearer Token required):
+- GET  /api/v1/health
+- GET  /api/v1/auth/totp-setup
+- POST /api/v1/auth/login
+- POST /api/v1/webhooks/midtrans
+
+================================================================================
+4. ENDPOINT SPECIFICATIONS
+================================================================================
+
+--------------------------------------------------------------------------------
+4.1 SYSTEM HEALTH
+--------------------------------------------------------------------------------
+Endpoint: GET /api/v1/health
+Description: Verifies server operational status, environment, and uptime.
+Headers: None
+Query Parameters: None
+Request Body: None
+
+Response 200 OK:
+{
+  "status": "healthy",
+  "system": "Sodalis Micro-Finance Admin Underwriting Terminal API",
+  "version": "1.0.0",
+  "timestamp": "2026-11-16T02:48:00.000Z",
+  "environment": "development"
+}
+
+--------------------------------------------------------------------------------
+4.2 AUTHENTICATION & TOTP 2FA
+--------------------------------------------------------------------------------
+Endpoint 1: GET /api/v1/auth/totp-setup
+Description: Generates the TOTP Base32 secret and visual QR Code Data URL so
+             admin can pair with Google Authenticator or Authy.
+Headers: None
+Request Body: None
+
+Response 200 OK:
+{
+  "success": true,
+  "data": {
+    "issuer": "Sodalis Micro-Finance Admin",
+    "account": "admin@sodalis.id",
+    "totpSecret": "JBSWY3DPEHPK3PXP",
+    "qrCodeUrl": "data:image/png;base64,iVBORw0KGgoAAAANSUh...",
+    "otpauthUri": "otpauth://totp/Sodalis%20Micro-Finance%20Admin:admin@sodalis.id?secret=JBSWY3DPEHPK3PXP&issuer=Sodalis%20Micro-Finance%20Admin"
+  }
+}
+
+---
+Endpoint 2: POST /api/v1/auth/login
+Description: Authenticates single admin using username/email, password, and
+             time-based 6-digit TOTP code. In development, "000000" bypasses TOTP.
+Headers: Content-Type: application/json
+Request Body:
+{
+  "identifier": "admin@sodalis.id", // or "admin"
+  "password": "SodalisSecure2026!",
+  "totpCode": "000000"              // 6-digit code from Google Authenticator or 000000 in dev
+}
+
+Response 200 OK:
+{
+  "success": true,
+  "message": "Admin authentication successful.",
+  "data": {
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "admin": {
+      "username": "admin",
+      "email": "admin@sodalis.id",
+      "role": "admin",
+      "terminal": "Sodalis Micro-Finance Underwriting Terminal"
+    }
+  }
+}
+
+Response 401 Unauthorized:
+{
+  "success": false,
+  "message": "Invalid administrative credentials." // or "Invalid 6-digit TOTP authentication code."
+}
+
+---
+Endpoint 3: GET /api/v1/auth/me
+Description: Validates current session token and returns current admin context.
+Headers: Authorization: Bearer <TOKEN>
+Request Body: None
+
+Response 200 OK:
+{
+  "success": true,
+  "data": {
+    "username": "admin",
+    "email": "admin@sodalis.id",
+    "role": "admin",
+    "terminal": "Sodalis Micro-Finance Underwriting Terminal",
+    "authTime": "2026-11-16T02:48:00.000Z"
+  }
+}
+
+--------------------------------------------------------------------------------
+4.3 OPERATIONS & UNDERWRITING DASHBOARD
+--------------------------------------------------------------------------------
+Endpoint: GET /api/v1/dashboard/summary
+Description: Returns high-level underwriting KPIs, capital liquidity, velocity
+             analytics, purpose breakdown, and recent user registrations.
+Headers: Authorization: Bearer <TOKEN>
+Query Parameters:
+- range: '7d' | '30d' (default) | '90d' | 'ytd'
+
+Response 200 OK:
+{
+  "success": true,
+  "data": {
+    "range": "30d",
+    "metrics": {
+      "totalDisbursedCapital": 185000000,
+      "totalInvestedCapital": 500000000,
+      "activeCapitalLiquidity": 315000000,
+      "pendingActionQueue": 12,
+      "pendingUsersCount": 5,
+      "pendingLoansCount": 7,
+      "totalLoansCount": 38
+    },
+    "velocityChart": {
+      "timeSeries": [
+        {
+          "date": "2026-11-01",
+          "loanCount": 3,
+          "totalRequested": 15000000,
+          "totalDisbursed": 15000000
+        }
+      ],
+      "purposeBreakdown": [
+        { "purpose": "UKT Semester Genap", "count": 14, "totalAmount": 70000000 },
+        { "purpose": "Lab Equipment", "count": 6, "totalAmount": 42000000 },
+        { "purpose": "Student Venture Grant", "count": 5, "totalAmount": 35000000 }
+      ]
+    },
+    "recentRegistrations": [
+      {
+        "id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
+        "email": "mahasiswa@ui.ac.id",
+        "role": "borrower",
+        "full_name": "Rian Kusuma",
+        "is_verified": false,
+        "created_at": "2026-11-15T10:12:00.000Z",
+        "phone": "+6281234567890",
+        "kyc_document_path": "/uploads/kyc/a0eebc99_ktp.jpg",
+        "profile": {
+          "university": "Universitas Indonesia",
+          "major": "Computer Science",
+          "nim": "2106728190",
+          "semester": 7,
+          "gpa": 3.82,
+          "ai_trust_score": 845,
+          "credit_limit": 15000000
+        }
+      }
+    ]
+  }
+}
+
+--------------------------------------------------------------------------------
+4.4 USER REGISTRATIONS & KYC INSPECTOR
+--------------------------------------------------------------------------------
+Endpoint 1: GET /api/v1/users
+Description: Search, filter, and paginate through all registered users joined with
+             either borrower or investor details.
+Headers: Authorization: Bearer <TOKEN>
+Query Parameters:
+- search: (string) matches full_name, email, or phone
+- role: 'borrower' | 'investor' | undefined (all)
+- isVerified: 'true' | 'false' | undefined (all)
+- page: (integer) default 1
+- limit: (integer) default 10, max 100
+
+Response 200 OK:
+{
+  "success": true,
+  "data": {
+    "items": [
+      {
+        "id": "e4b6d0e2-1234-4567-89ab-cdef01234567",
+        "email": "investor.pro@fund.id",
+        "role": "investor",
+        "full_name": "Dr. Bambang Sutrisno",
+        "is_verified": true,
+        "created_at": "2026-10-10T08:00:00.000Z",
+        "phone": "+628119876543",
+        "kyc_document_path": null,
+        "profile": {
+          "investor_type": "Institutional",
+          "bank_name": "Bank Central Asia (BCA)",
+          "total_invested": 100000000
+        }
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "limit": 10,
+      "total": 52,
+      "totalPages": 6
+    }
+  }
+}
+
+---
+Endpoint 2: GET /api/v1/users/:id
+Description: Returns single user detail with full borrower or investor profile dossier.
+Headers: Authorization: Bearer <TOKEN>
+Path Parameter: id (UUID of the user)
+
+Response 200 OK:
+{
+  "success": true,
+  "data": {
+    "id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
+    "email": "mahasiswa@ui.ac.id",
+    "role": "borrower",
+    "full_name": "Rian Kusuma",
+    "is_verified": false,
+    "created_at": "2026-11-15T10:12:00.000Z",
+    "phone": "+6281234567890",
+    "kyc_document_path": "/uploads/kyc/a0eebc99_ktp.jpg",
+    "profile": {
+      "id": "b1eebc99-9c0b-4ef8-bb6d-6bb9bd380a22",
+      "user_id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
+      "full_name": "Rian Kusuma",
+      "email": "mahasiswa@ui.ac.id",
+      "phone": "+6281234567890",
+      "university": "Universitas Indonesia",
+      "major": "Computer Science",
+      "nim": "2106728190",
+      "semester": 7,
+      "gpa": 3.82,
+      "sks": 134,
+      "attendance_rate": 96.5,
+      "ai_trust_score": 845,
+      "score_tier": "Tier A",
+      "credit_limit": 15000000,
+      "used_limit": 5000000,
+      "is_verified": false,
+      "bank_account": "BCA - 8830192831",
+      "created_at": "2026-11-15T10:12:00.000Z",
+      "updated_at": "2026-11-15T10:12:00.000Z"
+    }
+  }
+}
+
+---
+Endpoint 3: POST /api/v1/users/:id/documents
+Description: Uploads KYC identification document via Multer (multipart/form-data).
+             Stores file into ./public/uploads/kyc/ and updates users.kyc_document_path.
+Headers:
+- Authorization: Bearer <TOKEN>
+- Content-Type: multipart/form-data
+Body:
+- document: (Binary file: pdf, jpg, jpeg, png, webp. Max 15MB)
+
+Response 200 OK:
+{
+  "success": true,
+  "message": "KYC document uploaded successfully.",
+  "data": {
+    "user": {
+      "id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
+      "kyc_document_path": "/uploads/kyc/a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11_1763261280000_ktp_student.png"
+    },
+    "filePath": "/uploads/kyc/a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11_1763261280000_ktp_student.png"
+  }
+}
+
+---
+Endpoint 4: PATCH /api/v1/users/:id/kyc-decision
+Description: Underwriter approval or rejection of KYC. Updates users.is_verified
+             AND borrower_profiles.is_verified / investor_profiles.is_verified,
+             and creates an immutable entry in ./logs/audit.jsonl.
+Headers:
+- Authorization: Bearer <TOKEN>
+- Content-Type: application/json
+Request Body:
+{
+  "action": "APPROVE", // "APPROVE" or "REJECT"
+  "reason": "Student ID card and active matriculation verified via Dikti portal."
+}
+
+Response 200 OK:
+{
+  "success": true,
+  "message": "User KYC status updated to APPROVED successfully.",
+  "data": {
+    "user": {
+      "id": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
+      "is_verified": true
+    },
+    "auditLog": {
+      "id": "21d8bbf0-6923-45a7-96a5-51d8d32b50d9",
+      "timestamp": "2026-11-16T02:48:30.000Z",
+      "actor": "admin",
+      "action": "KYC_APPROVED",
+      "targetType": "user",
+      "targetId": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
+      "reason": "Student ID card and active matriculation verified via Dikti portal.",
+      "integrityHash": "5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8"
+    }
+  }
+}
+
+---
+Endpoint 5: POST /api/v1/users/bulk-kyc
+Description: Batch verify or reject multiple users simultaneously.
+Headers:
+- Authorization: Bearer <TOKEN>
+- Content-Type: application/json
+Request Body:
+{
+  "userIds": [
+    "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
+    "b1eebc99-9c0b-4ef8-bb6d-6bb9bd380a22"
+  ],
+  "action": "APPROVE", // "APPROVE" or "REJECT"
+  "reason": "Batch verification approved by Senior Credit Officer"
+}
+
+Response 200 OK:
+{
+  "success": true,
+  "message": "Bulk KYC APPROVE applied to 2 user(s).",
+  "data": {
+    "affectedCount": 2,
+    "isVerified": true,
+    "auditRecord": { ... }
+  }
+}
+
+--------------------------------------------------------------------------------
+4.5 LOAN APPLICATIONS & MIDTRANS DISBURSEMENT
+--------------------------------------------------------------------------------
+Endpoint 1: GET /api/v1/loans
+Description: Lists student loans with KPI counters, filtering and pagination.
+Headers: Authorization: Bearer <TOKEN>
+Query Parameters:
+- search: (string) matches loan_code, borrower_name, major, purpose
+- status: (string) 'pending' | 'approved_disburse' | 'disbursed' | 'rejected' | 'ALL'
+- riskTier: (string) 'Tier A' | 'Tier B' | 'Tier C' | 'ALL'
+- tenor: (integer) tenor in months (e.g. 6, 12)
+- page: (integer) default 1
+- limit: (integer) default 10
+
+Response 200 OK:
+{
+  "success": true,
+  "data": {
+    "kpi": {
+      "pendingUnderwriting": 8,
+      "approvedForDisbursal": 4,
+      "flaggedHighRisk": 2,
+      "totalLoans": 40
+    },
+    "items": [
+      {
+        "id": "c1eebc99-9c0b-4ef8-bb6d-6bb9bd380a33",
+        "borrower_id": "b1eebc99-9c0b-4ef8-bb6d-6bb9bd380a22",
+        "loan_code": "LN-202611-0012",
+        "borrower_name": "Rian Kusuma",
+        "major": "Computer Science",
+        "amount": 7500000,
+        "tenor_months": 6,
+        "monthly_interest_rate": 0.012,
+        "interest_amount": 540000,
+        "total_amount": 8040000,
+        "monthly_installment": 1340000,
+        "purpose": "UKT Semester Genap",
+        "ai_score": 845,
+        "risk_tier": "Tier A",
+        "status": "pending",
+        "created_at": "2026-11-14T09:00:00.000Z"
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "limit": 10,
+      "total": 40,
+      "totalPages": 4
+    }
+  }
+}
+
+---
+Endpoint 2: GET /api/v1/loans/:id
+Description: Fetches full credit dossier including academic records, parental job,
+             installments schedule, and investor shares.
+Headers: Authorization: Bearer <TOKEN>
+Path Parameter: id (UUID of the loan)
+
+Response 200 OK:
+{
+  "success": true,
+  "data": {
+    "id": "c1eebc99-9c0b-4ef8-bb6d-6bb9bd380a33",
+    "borrower_id": "b1eebc99-9c0b-4ef8-bb6d-6bb9bd380a22",
+    "loan_code": "LN-202611-0012",
+    "borrower_name": "Rian Kusuma",
+    "major": "Computer Science",
+    "amount": 7500000,
+    "tenor_months": 6,
+    "monthly_interest_rate": 0.012,
+    "interest_amount": 540000,
+    "total_amount": 8040000,
+    "monthly_installment": 1340000,
+    "purpose": "UKT Semester Genap",
+    "home_ownership": "Self Owned",
+    "parent_job": "Civil Servant (PNS)",
+    "residence_type": "Family House",
+    "previous_loan": false,
+    "working_student": true,
+    "payment_history_months": 12,
+    "parental_income": 12000000,
+    "sks": 134,
+    "attendance": 96.5,
+    "gpa": 3.82,
+    "dependents": 2,
+    "ai_score": 845,
+    "risk_tier": "Tier A",
+    "status": "pending",
+    "funded_amount": 7500000,
+    "repaid_amount": 0,
+    "repaid_installments": 0,
+    "created_at": "2026-11-14T09:00:00.000Z",
+    "borrowerProfile": { ... },
+    "installments": [
+      {
+        "id": "d1eebc99-9c0b-4ef8-bb6d-6bb9bd380a44",
+        "loan_id": "c1eebc99-9c0b-4ef8-bb6d-6bb9bd380a33",
+        "installment_number": 1,
+        "total_installments": 6,
+        "amount": 1340000,
+        "due_date": "2026-12-14",
+        "status": "pending"
+      }
+    ],
+    "investments": [ ... ]
+  }
+}
+
+---
+Endpoint 3: PATCH /api/v1/loans/:id/decision
+Description: Underwriter decision action.
+             - APPROVE_DISBURSE: Triggers Midtrans Snap payment/disbursement
+               transaction, marks loan status as "approved_disburse", and writes audit log.
+             - REQUEST_DOCS: Sets status to "docs_requested"
+             - REJECT: Sets status to "rejected"
+Headers:
+- Authorization: Bearer <TOKEN>
+- Content-Type: application/json
+Request Body:
+{
+  "action": "APPROVE_DISBURSE", // "APPROVE_DISBURSE" | "REQUEST_DOCS" | "REJECT"
+  "reason": "Strong academic standing (GPA 3.82) and verified parental income."
+}
+
+Response 200 OK:
+{
+  "success": true,
+  "message": "Loan decision APPROVE_DISBURSE applied successfully.",
+  "data": {
+    "loan": {
+      "id": "c1eebc99-9c0b-4ef8-bb6d-6bb9bd380a33",
+      "status": "approved_disburse",
+      "updated_at": "2026-11-16T02:48:45.000Z"
+    },
+    "midtrans": {
+      "token": "SNAP_TOKEN_ABC123456",
+      "redirect_url": "https://app.sandbox.midtrans.com/snap/v2/vtweb/mock-LN-202611-0012"
+    },
+    "auditRecord": {
+      "id": "e2d8bbf0-6923-45a7-96a5-51d8d32b50e1",
+      "action": "LOAN_APPROVE_DISBURSE",
+      "targetType": "loan",
+      "targetId": "c1eebc99-9c0b-4ef8-bb6d-6bb9bd380a33",
+      "actor": "admin",
+      "integrityHash": "a1b2c3d4..."
+    }
+  }
+}
+
+---
+Endpoint 4: POST /api/v1/loans/bulk-decision
+Description: Bulk approve or reject multiple loan applications.
+Headers:
+- Authorization: Bearer <TOKEN>
+- Content-Type: application/json
+Request Body:
+{
+  "loanIds": [
+    "c1eebc99-9c0b-4ef8-bb6d-6bb9bd380a33",
+    "c2eebc99-9c0b-4ef8-bb6d-6bb9bd380a34"
+  ],
+  "action": "APPROVE_DISBURSE", // "APPROVE_DISBURSE" | "REJECT"
+  "reason": "Underwriting criteria met for semester grant batch."
+}
+
+Response 200 OK:
+{
+  "success": true,
+  "message": "Bulk decision APPROVE_DISBURSE applied to 2 loan(s).",
+  "data": {
+    "affectedCount": 2,
+    "status": "approved_disburse",
+    "auditRecord": { ... }
+  }
+}
+
+--------------------------------------------------------------------------------
+4.6 COMPLIANCE AUDIT LOGS
+--------------------------------------------------------------------------------
+Endpoint: GET /api/v1/audit-logs
+Description: Unified compliance feed combining local append log (./logs/audit.jsonl)
+             with historical lifecycle events generated from Supabase tables (loans,
+             users, loan_installments). Each entry contains a deterministic SHA-256 hash.
+Headers: Authorization: Bearer <TOKEN>
+Query Parameters:
+- page: (integer) default 1
+- limit: (integer) default 20
+- search: (string) search across action, actor, targetType, reason, and hashes
+
+Response 200 OK:
+{
+  "success": true,
+  "data": {
+    "kpi": {
+      "approvedRegistrations": 28,
+      "acceptedLoans": 22,
+      "rejectedLoans": 4,
+      "totalAuditEntries": 76
+    },
+    "items": [
+      {
+        "id": "21d8bbf0-6923-45a7-96a5-51d8d32b50d9",
+        "timestamp": "2026-11-16T02:48:30.000Z",
+        "actor": "admin",
+        "action": "KYC_APPROVED",
+        "targetType": "user",
+        "targetId": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
+        "reason": "Student ID card and active matriculation verified via Dikti portal.",
+        "metadata": {
+          "role": "borrower",
+          "fullName": "Rian Kusuma",
+          "newVerifiedStatus": true
+        },
+        "integrityHash": "5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8"
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "limit": 20,
+      "total": 76,
+      "totalPages": 4
+    }
+  }
+}
+
+--------------------------------------------------------------------------------
+4.7 STREAMING REPORT EXPORTS (EXCEL & PDF)
+--------------------------------------------------------------------------------
+Endpoint: GET /api/v1/reports/export
+Description: Streams directly from Supabase into downloadable binary .xlsx or .pdf files.
+Headers: Authorization: Bearer <TOKEN>
+Query Parameters:
+- module: 'loans' | 'users' | 'audit_logs'
+- format: 'xlsx' | 'pdf'
+
+Response 200 OK:
+- Content-Type:
+  For xlsx: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+  For pdf:  application/pdf
+- Content-Disposition: attachment; filename="sodalis-loans-report-1763261300000.xlsx"
+- Body: Binary stream (direct file download)
+
+--------------------------------------------------------------------------------
+4.8 PAYMENT WEBHOOKS (MIDTRANS SNAP)
+--------------------------------------------------------------------------------
+Endpoint: POST /api/v1/webhooks/midtrans
+Description: Midtrans HTTP Notification Webhook handler.
+             Cryptographically verifies the notification signature:
+             SHA512(order_id + status_code + gross_amount + ServerKey).
+             On settlement/capture, automatically transitions loan status to "disbursed"
+             or loan_installments to "paid" in Supabase, and appends to audit.jsonl.
+Headers: Content-Type: application/json
+Request Body (Sent by Midtrans):
+{
+  "order_id": "LN-202611-0012",
+  "status_code": "200",
+  "gross_amount": "7500000.00",
+  "signature_key": "9a8b7c6d5e...",
+  "transaction_status": "settlement",
+  "fraud_status": "accept",
+  "payment_type": "bank_transfer",
+  "transaction_id": "89371024-midtrans-trx",
+  "settlement_time": "2026-11-16 09:45:00"
+}
+
+Response 200 OK:
+{
+  "success": true,
+  "message": "Midtrans notification processed successfully.",
+  "data": {
+    "type": "loan",
+    "id": "c1eebc99-9c0b-4ef8-bb6d-6bb9bd380a33",
+    "status": "disbursed"
+  }
+}
+
+================================================================================
+5. DATABASE SCHEMA FIELD MAPPING (EXISTING SUPABASE POSTGRESQL)
+================================================================================
+
+Table 1: users
+- id (uuid, primary key)
+- email (text)
+- role (text: 'borrower' | 'investor')
+- full_name (text)
+- is_verified (boolean)
+- created_at (timestamptz)
+- phone (text)
+- kyc_document_path (text, points to /uploads/kyc/{file})
+
+Table 2: borrower_profiles
+- id (uuid, primary key)
+- user_id (uuid, foreign key -> users.id)
+- full_name (text), email (text), phone (text)
+- university (text), major (text), nim (text), semester (int4)
+- gpa (numeric), sks (int4), attendance_rate (numeric)
+- ai_trust_score (int4, 300 - 850)
+- score_tier (text: 'Tier A' | 'Tier B' | 'Tier C')
+- credit_limit (int8, IDR)
+- used_limit (int8, IDR)
+- is_verified (boolean)
+- bank_account (text)
+- created_at (timestamptz), updated_at (timestamptz)
+
+Table 3: investor_profiles
+- id (uuid, primary key)
+- user_id (uuid, foreign key -> users.id)
+- full_name (text), email (text), phone (text)
+- investor_type (text: 'Individual' | 'Institutional' | 'Angel')
+- bank_name (text), bank_account (text)
+- total_invested (int8, IDR), total_return (int8, IDR)
+- is_verified (boolean)
+- created_at (timestamptz), updated_at (timestamptz)
+
+Table 4: loans
+- id (uuid, primary key)
+- borrower_id (uuid, foreign key -> borrower_profiles.id)
+- loan_code (text, e.g. LN-202611-0012)
+- borrower_name (text), major (text)
+- amount (int8, principal amount in IDR)
+- tenor_months (int4, e.g. 3, 6, 12)
+- monthly_interest_rate (numeric, e.g. 0.012)
+- interest_amount (int8, IDR)
+- total_amount (int8, IDR = amount + interest_amount)
+- monthly_installment (int8, IDR)
+- purpose (text, e.g. 'UKT', 'Lab Equipment')
+- home_ownership (text), parent_job (text), residence_type (text)
+- previous_loan (boolean), working_student (boolean)
+- payment_history_months (int4), parental_income (int8)
+- sks (int4), attendance (numeric), gpa (numeric), dependents (int4)
+- ai_score (int4), risk_tier (text)
+- status (text: 'pending' | 'approved_disburse' | 'disbursed' | 'rejected' | 'docs_requested')
+- funded_amount (int8), repaid_amount (int8), repaid_installments (int4)
+- created_at (timestamptz), updated_at (timestamptz)
+
+Table 5: loan_installments
+- id (uuid, primary key)
+- loan_id (uuid, foreign key -> loans.id)
+- installment_number (int4), total_installments (int4)
+- amount (int8), principal_amount (int8), service_fee (int8)
+- due_date (date), paid_date (timestamptz)
+- status (text: 'pending' | 'paid' | 'overdue')
+- note (text), tag (text), payment_method (text), va_number (text), transaction_id (text)
+- created_at (timestamptz), updated_at (timestamptz)
+
+Table 6: investments
+- id (uuid, primary key)
+- investor_id (uuid, foreign key -> investor_profiles.id)
+- loan_id (uuid, foreign key -> loans.id)
+- investment_code (text, e.g. INV-2026-0091)
+- amount (int8, IDR), investor_share (numeric), annual_yield_rate (numeric)
+- status (text), returned_amount (int8)
+- created_at (timestamptz), updated_at (timestamptz)
+
+Table 7: investor_returns
+- id (uuid, primary key)
+- investment_id (uuid -> investments.id), investor_id (uuid), loan_id (uuid)
+- installment_id (uuid -> loan_installments.id)
+- installment_number (int4), amount (int8), principal_amount (int8), yield_amount (int8)
+- status (text), received_at (timestamptz), created_at (timestamptz)
+
+================================================================================
+6. FRONTEND (REACT VITE + AXIOS) INTEGRATION SNIPPET
+================================================================================
+Create `src/api/client.js` in your React Vite application:
+
+```javascript
+import axios from 'axios';
+
+export const apiClient = axios.create({
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1',
+  timeout: 15000,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// Automatic JWT Bearer token attachment
+apiClient.interceptors.request.use((config) => {
+  const token = localStorage.getItem('sodalis_admin_token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// Centralized error interceptor
+apiClient.interceptors.response.use(
+  (response) => response.data,
+  (error) => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('sodalis_admin_token');
+      window.location.href = '/login';
+    }
+    return Promise.reject(error.response?.data || error);
+  }
+);
+```
+
+================================================================================
+END OF SODALIS API CONTRACT
+================================================================================
+

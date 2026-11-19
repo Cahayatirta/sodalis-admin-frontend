@@ -1,0 +1,898 @@
+{
+  "info": {
+    "_postman_id": "7f8b9e12-3456-4cde-8901-abcdef123456",
+    "name": "Sodalis Micro-Finance Admin Underwriting Terminal API",
+    "description": "Production-ready Postman Collection for Sodalis Micro-Finance Admin Underwriting Terminal. Automatically extracts JWT tokens, User IDs, and Loan IDs for automated end-to-end testing.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Auth & TOTP MFA",
+      "item": [
+        {
+          "name": "1.1 Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('System is healthy', function () {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.status).to.eql('healthy');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.2 Get TOTP 2FA Setup QR",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/auth/totp-setup",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "totp-setup"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Contains QR Code Data URL', function () {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "    pm.expect(json.data.qrCodeUrl).to.include('data:image/png;base64');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.3 Admin Login (with Dev TOTP Bypass)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identifier\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\",\n  \"totpCode\": \"{{totpDevBypass}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "login"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('JWT token is returned and saved', function () {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "    pm.expect(json.data.token).to.be.a('string');",
+                  "    pm.environment.set('jwtToken', json.data.token);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.4 Get Current Admin Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "me"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Admin role verified', function () {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data.role).to.eql('admin');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Operations Dashboard",
+      "item": [
+        {
+          "name": "2.1 Dashboard Summary (30d)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/dashboard/summary?range=30d",
+              "host": ["{{baseUrl}}"],
+              "path": ["dashboard", "summary"],
+              "query": [
+                {
+                  "key": "range",
+                  "value": "30d"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Metrics and charts present', function () {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data.metrics).to.have.property('totalDisbursedCapital');",
+                  "    pm.expect(json.data.metrics).to.have.property('activeCapitalLiquidity');",
+                  "    pm.expect(json.data.metrics).to.have.property('pendingActionQueue');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.2 Dashboard Summary (7d)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/dashboard/summary?range=7d",
+              "host": ["{{baseUrl}}"],
+              "path": ["dashboard", "summary"],
+              "query": [
+                {
+                  "key": "range",
+                  "value": "7d"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "2.3 Dashboard Summary (YTD)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/dashboard/summary?range=ytd",
+              "host": ["{{baseUrl}}"],
+              "path": ["dashboard", "summary"],
+              "query": [
+                {
+                  "key": "range",
+                  "value": "ytd"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Users & KYC Management",
+      "item": [
+        {
+          "name": "3.1 List Users (Paginated & Extract Sample User)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["users"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Capture sampleUserId if users exist', function () {",
+                  "    var json = pm.response.json();",
+                  "    if (json.data.items && json.data.items.length > 0) {",
+                  "        var firstUser = json.data.items[0];",
+                  "        pm.environment.set('sampleUserId', firstUser.id);",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.2 Filter Users (Borrower & Unverified)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users?role=borrower&isVerified=false&page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["users"],
+              "query": [
+                {
+                  "key": "role",
+                  "value": "borrower"
+                },
+                {
+                  "key": "isVerified",
+                  "value": "false"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "3.3 Get Single User Detail Dossier",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/users/{{sampleUserId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "{{sampleUserId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 or 404 (if no user)', function () {",
+                  "    pm.expect([200, 404]).to.include(pm.response.code);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.4 Approve User KYC Decision",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"APPROVE\",\n  \"reason\": \"Academic standing and national ID validated by credit committee.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/{{sampleUserId}}/kyc-decision",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "{{sampleUserId}}", "kyc-decision"]
+            }
+          }
+        },
+        {
+          "name": "3.5 Reject User KYC Decision",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"REJECT\",\n  \"reason\": \"Incomplete matriculation evidence.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/{{sampleUserId}}/kyc-decision",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "{{sampleUserId}}", "kyc-decision"]
+            }
+          }
+        },
+        {
+          "name": "3.6 Bulk KYC Decision",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userIds\": [\"{{sampleUserId}}\"],\n  \"action\": \"APPROVE\",\n  \"reason\": \"Batch approved by senior underwriting board.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/users/bulk-kyc",
+              "host": ["{{baseUrl}}"],
+              "path": ["users", "bulk-kyc"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Loans & Midtrans Webhook",
+      "item": [
+        {
+          "name": "4.1 List Loans with Underwriting KPIs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/loans?page=1&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["loans"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('KPI counters are present', function () {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data.kpi).to.have.property('pendingUnderwriting');",
+                  "    pm.expect(json.data.kpi).to.have.property('approvedForDisbursal');",
+                  "    pm.expect(json.data.kpi).to.have.property('flaggedHighRisk');",
+                  "    if (json.data.items && json.data.items.length > 0) {",
+                  "        var firstLoan = json.data.items[0];",
+                  "        pm.environment.set('sampleLoanId', firstLoan.id);",
+                  "        pm.environment.set('midtransOrderId', firstLoan.loan_code);",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.2 Filter Loans by Status & Risk Tier",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/loans?status=pending&riskTier=Tier%20A",
+              "host": ["{{baseUrl}}"],
+              "path": ["loans"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "pending"
+                },
+                {
+                  "key": "riskTier",
+                  "value": "Tier A"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "4.3 Get Single Loan Dossier",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/loans/{{sampleLoanId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["loans", "{{sampleLoanId}}"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200 or 404 (if no loan)', function () {",
+                  "    pm.expect([200, 404]).to.include(pm.response.code);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.4 Approve Loan & Trigger Midtrans Disbursal",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"APPROVE_DISBURSE\",\n  \"reason\": \"Verified GPA 3.82 and parental income guarantee.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/loans/{{sampleLoanId}}/decision",
+              "host": ["{{baseUrl}}"],
+              "path": ["loans", "{{sampleLoanId}}", "decision"]
+            }
+          }
+        },
+        {
+          "name": "4.5 Request Additional Docs for Loan",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"REQUEST_DOCS\",\n  \"reason\": \"Please provide updated tuition invoice.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/loans/{{sampleLoanId}}/decision",
+              "host": ["{{baseUrl}}"],
+              "path": ["loans", "{{sampleLoanId}}", "decision"]
+            }
+          }
+        },
+        {
+          "name": "4.6 Reject Loan Decision",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"REJECT\",\n  \"reason\": \"Debt-to-income ratio exceeds terminal underwriting ceiling.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/loans/{{sampleLoanId}}/decision",
+              "host": ["{{baseUrl}}"],
+              "path": ["loans", "{{sampleLoanId}}", "decision"]
+            }
+          }
+        },
+        {
+          "name": "4.7 Bulk Loan Decision",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"loanIds\": [\"{{sampleLoanId}}\"],\n  \"action\": \"APPROVE_DISBURSE\",\n  \"reason\": \"Batch approved for semester disbursement.\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/loans/bulk-decision",
+              "host": ["{{baseUrl}}"],
+              "path": ["loans", "bulk-decision"]
+            }
+          }
+        },
+        {
+          "name": "4.8 Midtrans Webhook Callback (Settlement)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order_id\": \"{{midtransOrderId}}\",\n  \"status_code\": \"200\",\n  \"gross_amount\": \"5000000.00\",\n  \"signature_key\": \"dev-mock-signature\",\n  \"transaction_status\": \"settlement\",\n  \"fraud_status\": \"accept\",\n  \"payment_type\": \"bank_transfer\",\n  \"transaction_id\": \"trx-1763261280000\",\n  \"settlement_time\": \"2026-11-16 10:00:00\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/webhooks/midtrans",
+              "host": ["{{baseUrl}}"],
+              "path": ["webhooks", "midtrans"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Webhook processed successfully', function () {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5. Audit Logs & Report Exports",
+      "item": [
+        {
+          "name": "5.1 Get Unified Compliance Audit Logs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/audit-logs?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["audit-logs"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Contains compliance items & integrity hashes', function () {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.data.kpi).to.have.property('approvedRegistrations');",
+                  "    pm.expect(json.data.items).to.be.an('array');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.2 Search Audit Logs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/audit-logs?search=KYC",
+              "host": ["{{baseUrl}}"],
+              "path": ["audit-logs"],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "KYC"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "5.3 Export Loans to Excel (.xlsx)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/reports/export?module=loans&format=xlsx",
+              "host": ["{{baseUrl}}"],
+              "path": ["reports", "export"],
+              "query": [
+                {
+                  "key": "module",
+                  "value": "loans"
+                },
+                {
+                  "key": "format",
+                  "value": "xlsx"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Content-Type is Excel', function () {",
+                  "    pm.expect(pm.response.headers.get('Content-Type')).to.include('spreadsheetml');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.4 Export Loans to PDF (.pdf)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/reports/export?module=loans&format=pdf",
+              "host": ["{{baseUrl}}"],
+              "path": ["reports", "export"],
+              "query": [
+                {
+                  "key": "module",
+                  "value": "loans"
+                },
+                {
+                  "key": "format",
+                  "value": "pdf"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test('Content-Type is PDF', function () {",
+                  "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/pdf');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.5 Export Audit Logs to Excel (.xlsx)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/reports/export?module=audit_logs&format=xlsx",
+              "host": ["{{baseUrl}}"],
+              "path": ["reports", "export"],
+              "query": [
+                {
+                  "key": "module",
+                  "value": "audit_logs"
+                },
+                {
+                  "key": "format",
+                  "value": "xlsx"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "5.6 Export Users to PDF (.pdf)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{jwtToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/reports/export?module=users&format=pdf",
+              "host": ["{{baseUrl}}"],
+              "path": ["reports", "export"],
+              "query": [
+                {
+                  "key": "module",
+                  "value": "users"
+                },
+                {
+                  "key": "format",
+                  "value": "pdf"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
+
