@@ -213,7 +213,7 @@ router.patch('/:id/decision', authenticateAdmin, async (req, res, next) => {
       })
       .eq('id', id)
       .select()
-      .single();
+      .maybeSingle();
 
     if (updateErr) throw updateErr;
 

@@ -7,12 +7,6 @@ export const env = {
   nodeEnv: process.env.NODE_ENV || 'development',
   frontendUrl: process.env.FRONTEND_URL || 'http://localhost:5173',
 
-  admin: {
-    username: process.env.ADMIN_USERNAME || 'admin',
-    email: process.env.ADMIN_EMAIL || 'admin@sodalis.id',
-    password: process.env.ADMIN_PASSWORD || 'SodalisSecure2026!',
-    totpSecret: process.env.ADMIN_TOTP_SECRET || 'JBSWY3DPEHPK3PXP',
-  },
 
   jwt: {
     secret: process.env.JWT_SECRET || 'sodalis-super-secure-production-jwt-token-secret-2026',

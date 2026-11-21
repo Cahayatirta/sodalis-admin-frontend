@@ -181,7 +181,7 @@ router.post(
         .update({ kyc_document_path: relativePath })
         .eq('id', id)
         .select()
-        .single();
+        .maybeSingle();
 
       if (updateErr) throw updateErr;
 

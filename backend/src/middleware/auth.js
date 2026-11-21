@@ -14,7 +14,7 @@ export const authenticateAdmin = (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, env.jwt.secret);
-    if (decoded.role !== 'admin' && decoded.username !== env.admin.username) {
+    if (decoded.role !== 'admin') {
       return res.status(403).json({
         success: false,
         message: 'Forbidden. Insufficient permissions for underwriting terminal.',
